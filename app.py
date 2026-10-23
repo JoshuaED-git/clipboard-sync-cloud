@@ -1,203 +1,379 @@
-from flask import Flask, render_template_string, request, jsonify
+import os
+from flask import Flask, render_template_string, request
+from flask_socketio import SocketIO, emit
+
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'eden_cloud_secret'
+app.config['SECRET_KEY'] = 'eden_cloud_secret_key'
+socketio = SocketIO(app, cors_allowed_origins="*")
+
 clipboard_history = []
-CURRENT_CLIPBOARD = "Bienvenue sur ClipBoard Sync Cloud ! Accessible 24h/24."
+CURRENT_CLIPBOARD = "Bienvenue sur ClipBoard Sync Cloud !"
+
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ClipBoard Sync Cloud</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClipBoard Sync | EDEN DRC GROUP</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
         :root {
-            --bg-color: #0f172a;
-            --card-bg: #1e293b;
-            --text-color: #f8fafc;
-            --text-muted: #94a3b8;
-            --primary: #38bdf8;
-            --primary-hover: #0ea5e9;
-            --danger: #f43f5e;
-            --success: #22c55e;
-            --border: #334155;
+            --bg-gradient: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+            --card-bg: rgba(22, 27, 34, 0.75);
+            --accent-blue: #2f81f7;
+            --accent-hover: #58a6ff;
+            --accent-orange: #f0883e;
+            --success: #238636;
+            --danger: #da3633;
+            --text-main: #f0f6fc;
+            --text-muted: #8b949e;
+            --border: rgba(240, 246, 252, 0.1);
         }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+        
         body {
-            font-family: system-ui, -apple-system, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 16px;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
-            box-sizing: border-box;
+            padding: 20px;
         }
-        .app-container {
+
+        .container {
             width: 100%;
-            max-width: 500px;
+            max-width: 650px;
             background: var(--card-bg);
-            border-radius: 16px;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(16px);
             border: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
+            border-radius: 20px;
+            padding: 28px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            animation: fadeIn 0.6s ease-out;
         }
-        .app-header {
-            padding: 16px 20px;
-            background: rgba(15, 23, 42, 0.5);
-            border-bottom: 1px solid var(--border);
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
         }
-        .app-title { font-size: 18px; font-weight: 700; color: var(--primary); margin: 0; }
-        .status-badge {
-            font-size: 12px; padding: 4px 10px; border-radius: 20px;
-            background: rgba(34, 197, 94, 0.15); color: var(--success); font-weight: 600;
-            display: flex; align-items: center; gap: 6px;
+
+        .brand-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #ffffff;
         }
-        .status-dot { width: 8px; height: 8px; background-color: var(--success); border-radius: 50%; }
-        .app-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
-        label { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+
+        .brand-badge {
+            background: linear-gradient(45deg, var(--accent-orange), #f39c12);
+            color: #000;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 6px;
+            letter-spacing: 0.5px;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: #3fb950;
+            background: rgba(63, 185, 80, 0.1);
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(63, 185, 80, 0.2);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #3fb950;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #3fb950;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(1.2); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        .welcome-msg {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            margin-bottom: 18px;
+        }
+
+        .textarea-box {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
         textarea {
-            width: 100%; height: 130px; background: #0f172a; border: 1px solid var(--border);
-            border-radius: 10px; padding: 12px; color: var(--text-color); font-size: 15px;
-            box-sizing: border-box; resize: none; outline: none;
+            width: 100%;
+            height: 160px;
+            background: rgba(13, 17, 23, 0.8);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            color: var(--text-main);
+            font-size: 1rem;
+            resize: none;
+            outline: none;
+            transition: all 0.3s ease;
         }
-        textarea:focus { border-color: var(--primary); }
-        .action-row { display: flex; gap: 10px; }
-        button {
-            flex: 1; padding: 12px; border-radius: 10px; font-size: 14px; font-weight: 600;
-            border: none; cursor: pointer; transition: background 0.2s;
+
+        textarea:focus {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 12px rgba(47, 129, 247, 0.25);
         }
-        .btn-primary { background-color: var(--primary); color: #0f172a; }
-        .btn-primary:hover { background-color: var(--primary-hover); }
-        .btn-danger { background-color: rgba(244, 63, 94, 0.15); color: var(--danger); }
-        .btn-danger:hover { background-color: var(--danger); color: white; }
-        .history-container { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 16px; }
-        .history-list { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+
+        .btn {
+            border: none;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .btn:active { transform: scale(0.97); }
+
+        .btn-primary { background: var(--accent-blue); color: white; }
+        .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 4px 12px rgba(47, 129, 247, 0.3); }
+
+        .btn-secondary { background: #21262d; color: var(--text-main); border: 1px solid var(--border); }
+        .btn-secondary:hover { background: #30363d; color: white; }
+
+        .btn-danger { background: rgba(218, 54, 51, 0.15); color: #f85149; border: 1px solid rgba(218, 54, 51, 0.3); }
+        .btn-danger:hover { background: var(--danger); color: white; }
+
+        .history-section {
+            background: rgba(13, 17, 23, 0.4);
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid var(--border);
+        }
+
+        .history-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 140px;
+            overflow-y: auto;
+        }
+
         .history-item {
-            background: #0f172a; border: 1px solid var(--border); padding: 10px 12px;
-            border-radius: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+            background: rgba(22, 27, 34, 0.8);
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            color: #c9d1d9;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.2s;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
-        .history-text { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
-        .btn-sm { padding: 6px 10px; font-size: 12px; border-radius: 6px; background: var(--border); color: var(--text-color); flex: unset; }
-        .btn-sm:hover { background: var(--primary); color: #0f172a; }
+
+        .history-item:hover { background: #21262d; color: var(--accent-hover); }
+
         .toast {
-            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px);
-            background: var(--success); color: #0f172a; padding: 10px 20px; border-radius: 30px;
-            font-weight: 600; font-size: 13px; transition: transform 0.3s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--success);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+            opacity: 0;
+            transition: all 0.3s ease;
+            pointer-events: none;
         }
-        .toast.show { transform: translateX(-50%) translateY(0); }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
-    <div class="app-container">
-        <div class="app-header">
-            <h1 class="app-title">📋 ClipBoard Cloud</h1>
-            <div class="status-badge"><div class="status-dot"></div> En ligne</div>
+
+    <div class="container">
+        <!-- En-tête / Header -->
+        <div class="header">
+            <div class="brand-title">
+                <i class="fa-solid fa-paste" style="color: var(--accent-blue);"></i>
+                ClipBoard Sync
+                <span class="brand-badge">EDG</span>
+            </div>
+            <div class="status">
+                <span class="status-dot"></span>
+                <span>En ligne</span>
+            </div>
         </div>
-        <div class="app-body">
-            <div>
-                <label>Presse-papiers Actuel</label>
-                <textarea id="clipText" placeholder="Tape ou colle ton texte ici..."></textarea>
+
+        <!-- Message de Salutation -->
+        <div class="welcome-msg">
+            👋 Bonjour ! Partagez vos textes et liens en temps réel sur tous vos appareils.
+        </div>
+
+        <!-- Zone de texte principal -->
+        <div class="textarea-box">
+            <textarea id="clipboard" placeholder="Tapez ou collez votre texte ici..."></textarea>
+        </div>
+
+        <!-- Grille de boutons d'action -->
+        <div class="actions-grid">
+            <button class="btn btn-primary" onclick="sendClipboard()">
+                <i class="fa-solid fa-paper-plane"></i> Mettre à jour
+            </button>
+            <button class="btn btn-secondary" onclick="copyToClipboard()">
+                <i class="fa-solid fa-copy"></i> Copier
+            </button>
+            <button class="btn btn-danger" onclick="clearClipboard()">
+                <i class="fa-solid fa-trash-can"></i> Effacer
+            </button>
+        </div>
+
+        <!-- Historique Récent -->
+        <div class="history-section">
+            <div class="history-title">
+                <i class="fa-solid fa-clock-rotate-left"></i> Historique récent
             </div>
-            <div class="action-row">
-                <button class="btn-primary" onclick="updateClipboard()">Mettre à jour</button>
-                <button class="btn-danger" onclick="clearHistory()">Tout effacer</button>
-            </div>
-            <div class="history-container">
-                <label>Historique distant</label>
-                <div id="historyList" class="history-list"></div>
+            <div class="history-list" id="historyList">
+                <div class="history-item" style="color: var(--text-muted); text-align: center;">Aucun élément récent</div>
             </div>
         </div>
     </div>
-    <div id="toast" class="toast">Synchronisé !</div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">
+        <i class="fa-solid fa-circle-check"></i> <span id="toastMsg">Copié dans le presse-papiers !</span>
+    </div>
+
     <script>
-        const clipText = document.getElementById('clipText');
+        const socket = io();
+        const textarea = document.getElementById('clipboard');
         const historyList = document.getElementById('historyList');
-        const toast = document.getElementById('toast');
-        function showToast(msg) {
-            toast.textContent = msg;
-            toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 2000);
+
+        socket.on('connect', () => {
+            console.log('Connecté au serveur Cloud EDG');
+        });
+
+        socket.on('update_clipboard', (data) => {
+            textarea.value = data.text;
+            updateHistory(data.history);
+        });
+
+        function sendClipboard() {
+            const text = textarea.value;
+            socket.emit('sync_text', { text: text });
+            showToast('Presse-papiers synchronisé !');
         }
-        async function fetchState() {
-            try {
-                let res = await fetch('/api/get');
-                let data = await res.json();
-                if (document.activeElement !== clipText) {
-                    clipText.value = data.current;
-                }
-                renderHistory(data.history);
-            } catch (e) { console.error(e); }
-        }
-        async function updateClipboard() {
-            let text = clipText.value;
-            await fetch('/api/set', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({text: text})
+
+        function copyToClipboard() {
+            if (!textarea.value) return;
+            navigator.clipboard.writeText(textarea.value).then(() => {
+                showToast('Texte copié !');
             });
-            showToast("Texte envoyé au cloud !");
-            fetchState();
         }
-        async function clearHistory() {
-            await fetch('/api/clear', {method: 'POST'});
-            showToast("Historique vidé");
-            fetchState();
+
+        function clearClipboard() {
+            textarea.value = '';
+            socket.emit('sync_text', { text: '' });
+            showToast('Presse-papiers effacé !');
         }
-        function copyText(text) {
-            navigator.clipboard.writeText(text).then(() => showToast("Copié !"));
-        }
-        function renderHistory(history) {
+
+        function updateHistory(history) {
+            if (!history || history.length === 0) return;
             historyList.innerHTML = '';
-            if (history.length === 0) {
-                historyList.innerHTML = '<div style="color: var(--text-muted); text-align: center; font-size: 13px; padding: 15px;">Aucun historique</div>';
-                return;
-            }
-            history.forEach(item => {
-                let div = document.createElement('div');
+            history.slice(-5).reverse().forEach(item => {
+                const div = document.createElement('div');
                 div.className = 'history-item';
-                div.innerHTML = `<span class="history-text">${escapeHtml(item)}</span>
-                                 <button class="btn-sm" onclick="copyText(` + "`" + escapeJs(item) + "`" + `)">Copier</button>`;
+                div.innerText = item;
+                div.onclick = () => {
+                    textarea.value = item;
+                    sendClipboard();
+                };
                 historyList.appendChild(div);
             });
         }
-        function escapeHtml(t) { return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
-        function escapeJs(t) { return t.replace(/\/g, '\\').replace(/`/g, '\`'); }
-        setInterval(fetchState, 2000);
-        fetchState();
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').innerText = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2500);
+        }
     </script>
 </body>
 </html>
 """
+
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
-@app.route('/api/get', methods=['GET'])
-def get_clipboard():
-    return jsonify({'current': CURRENT_CLIPBOARD, 'history': clipboard_history})
-@app.route('/api/set', methods=['POST'])
-def set_clipboard():
-    global CURRENT_CLIPBOARD
-    data = request.get_json()
+
+@socketio.on('sync_text')
+def handle_sync(data):
+    global CURRENT_CLIPBOARD, clipboard_history
     text = data.get('text', '')
-    if text and text != CURRENT_CLIPBOARD:
-        CURRENT_CLIPBOARD = text
-        if not clipboard_history or clipboard_history[0] != text:
-            clipboard_history.insert(0, text)
-            if len(clipboard_history) > 50:
-                clipboard_history.pop()
-    return jsonify({'status': 'success'})
-@app.route('/api/clear', methods=['POST'])
-def clear_clipboard():
-    global clipboard_history, CURRENT_CLIPBOARD
-    clipboard_history = []
-    CURRENT_CLIPBOARD = ""
-    return jsonify({'status': 'success'})
+    CURRENT_CLIPBOARD = text
+    if text and (not clipboard_history or clipboard_history[-1] != text):
+        clipboard_history.append(text)
+        if len(clipboard_history) > 10:
+            clipboard_history.pop(0)
+    emit('update_clipboard', {'text': CURRENT_CLIPBOARD, 'history': clipboard_history}, broadcast=True)
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    socketio.run(app, host='0.0.0.0', port=port)
