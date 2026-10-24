@@ -8,6 +8,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 clipboard_history = []
 CURRENT_CLIPBOARD = "Bienvenue sur ClipBoard Sync Cloud !"
+MEMO_CONTENT = ""
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -22,7 +23,7 @@ HTML_TEMPLATE = """
     <style>
         :root {
             --bg-gradient: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
-            --card-bg: rgba(22, 27, 34, 0.75);
+            --card-bg: rgba(22, 27, 34, 0.85);
             --accent-blue: #2f81f7;
             --accent-hover: #58a6ff;
             --accent-orange: #f0883e;
@@ -43,8 +44,56 @@ HTML_TEMPLATE = """
             justify-content: center;
             align-items: center;
             padding: 20px;
+            overflow: hidden;
         }
 
+        /* --- SPLASH SCREEN ANIMATION --- */
+        #splash-screen {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #090d16;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.8s ease, visibility 0.8s ease;
+        }
+
+        .splash-logo {
+            font-size: 4rem;
+            color: white;
+            background: linear-gradient(135deg, #1f6feb, var(--accent-orange));
+            width: 100px; height: 100px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(47, 129, 247, 0.4);
+            animation: dropBounce 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+
+        @keyframes dropBounce {
+            0% { transform: translateY(-150px) scale(0.5); opacity: 0; }
+            60% { transform: translateY(20px) scale(1.05); opacity: 1; }
+            80% { transform: translateY(-10px) scale(0.95); }
+            100% { transform: translateY(0) scale(1); opacity: 1; }
+        }
+
+        .splash-text {
+            margin-top: 20px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            border-right: 2px solid var(--accent-blue);
+            white-space: nowrap;
+            overflow: hidden;
+            width: 0;
+            animation: typing 2s steps(25, end) 0.8s forwards, blink 0.75s step-end infinite;
+        }
+
+        @keyframes typing { from { width: 0; } to { width: 280px; } }
+        @keyframes blink { from, to { border-color: transparent; } 50% { border-color: var(--accent-blue); } }
+
+        /* --- MAIN APP CONTAINER --- */
         .container {
             width: 100%;
             max-width: 650px;
@@ -53,26 +102,28 @@ HTML_TEMPLATE = """
             border: 1px solid var(--border);
             border-radius: 20px;
             padding: 28px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
-            animation: fadeIn 0.6s ease-out;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.8s ease 0.3s;
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(15px); }
-            to { opacity: 1; transform: translateY(0); }
+        .container.visible {
+            opacity: 1;
+            transform: translateY(0);
         }
 
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 16px;
+            margin-bottom: 16px;
+            padding-bottom: 14px;
             border-bottom: 1px solid var(--border);
         }
 
         .brand-title {
-            font-size: 1.4rem;
+            font-size: 1.3rem;
             font-weight: 700;
             display: flex;
             align-items: center;
@@ -87,79 +138,73 @@ HTML_TEMPLATE = """
             font-weight: 700;
             padding: 3px 8px;
             border-radius: 6px;
-            letter-spacing: 0.5px;
         }
 
         .status {
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 0.85rem;
+            font-size: 0.82rem;
             color: #3fb950;
             background: rgba(63, 185, 80, 0.1);
-            padding: 6px 12px;
+            padding: 5px 12px;
             border-radius: 20px;
             border: 1px solid rgba(63, 185, 80, 0.2);
         }
 
         .status-dot {
-            width: 8px;
-            height: 8px;
+            width: 7px; height: 7px;
             background-color: #3fb950;
             border-radius: 50%;
             box-shadow: 0 0 8px #3fb950;
             animation: pulse 2s infinite;
         }
 
-        @keyframes pulse {
-            0% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.4; transform: scale(1.2); }
-            100% { opacity: 1; transform: scale(1); }
-        }
+        @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.2); } 100% { opacity: 1; transform: scale(1); } }
 
+        /* Salutation dynamique */
         .welcome-msg {
-            font-size: 0.95rem;
-            color: var(--text-muted);
-            margin-bottom: 18px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--accent-hover);
+            margin-bottom: 16px;
+            background: rgba(47, 129, 247, 0.08);
+            padding: 10px 14px;
+            border-radius: 10px;
+            border-left: 3px solid var(--accent-blue);
         }
 
-        .textarea-box {
-            position: relative;
-            margin-bottom: 20px;
-        }
+        .textarea-box { position: relative; margin-bottom: 16px; }
 
         textarea {
             width: 100%;
-            height: 160px;
+            height: 130px;
             background: rgba(13, 17, 23, 0.8);
             border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 16px;
+            padding: 14px;
             color: var(--text-main);
-            font-size: 1rem;
+            font-size: 0.95rem;
             resize: none;
             outline: none;
             transition: all 0.3s ease;
         }
 
-        textarea:focus {
-            border-color: var(--accent-blue);
-            box-shadow: 0 0 12px rgba(47, 129, 247, 0.25);
-        }
+        textarea:focus { border-color: var(--accent-blue); box-shadow: 0 0 10px rgba(47, 129, 247, 0.25); }
 
         .actions-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
             gap: 10px;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }
 
         .btn {
             border: none;
-            padding: 12px 16px;
+            padding: 11px 14px;
             border-radius: 10px;
             font-weight: 600;
-            font-size: 0.9rem;
+            font-size: 0.88rem;
             cursor: pointer;
             display: flex;
             align-items: center;
@@ -169,30 +214,38 @@ HTML_TEMPLATE = """
         }
 
         .btn:active { transform: scale(0.97); }
-
         .btn-primary { background: var(--accent-blue); color: white; }
         .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 4px 12px rgba(47, 129, 247, 0.3); }
-
         .btn-secondary { background: #21262d; color: var(--text-main); border: 1px solid var(--border); }
         .btn-secondary:hover { background: #30363d; color: white; }
-
         .btn-danger { background: rgba(218, 54, 51, 0.15); color: #f85149; border: 1px solid rgba(218, 54, 51, 0.3); }
         .btn-danger:hover { background: var(--danger); color: white; }
+        .btn-memo { background: rgba(240, 136, 62, 0.15); color: var(--accent-orange); border: 1px solid rgba(240, 136, 62, 0.3); }
+        .btn-memo:hover { background: var(--accent-orange); color: white; }
+
+        /* Bloc Mémo escamotable (+) */
+        .memo-container {
+            display: none;
+            margin-bottom: 16px;
+            animation: fadeIn 0.3s ease;
+        }
+        .memo-container.active { display: block; }
+        .memo-textarea { height: 80px; font-size: 0.88rem; margin-top: 6px; }
 
         .history-section {
             background: rgba(13, 17, 23, 0.4);
             border-radius: 12px;
-            padding: 16px;
+            padding: 14px;
             border: 1px solid var(--border);
         }
 
         .history-title {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             font-weight: 700;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.8px;
-            margin-bottom: 12px;
+            margin-bottom: 10px;
             display: flex;
             align-items: center;
             gap: 6px;
@@ -201,54 +254,73 @@ HTML_TEMPLATE = """
         .history-list {
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            max-height: 140px;
+            gap: 6px;
+            max-height: 110px;
             overflow-y: auto;
         }
 
         .history-item {
             background: rgba(22, 27, 34, 0.8);
-            padding: 10px 14px;
-            border-radius: 8px;
-            font-size: 0.88rem;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.84rem;
             color: #c9d1d9;
             border: 1px solid var(--border);
             cursor: pointer;
             transition: background 0.2s;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
 
         .history-item:hover { background: #21262d; color: var(--accent-hover); }
 
-        .toast {
-            position: fixed;
-            bottom: 24px;
-            left: 50%;
-            transform: translateX(-50%) translateY(100px);
-            background: var(--success);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 30px;
-            font-weight: 600;
-            font-size: 0.9rem;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.4);
-            opacity: 0;
-            transition: all 0.3s ease;
-            pointer-events: none;
+        /* Modal Onboarding (Premier nom) */
+        #onboard-modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: none; justify-content: center; align-items: center;
+            z-index: 10000;
+            backdrop-filter: blur(8px);
+        }
+        .modal-box {
+            background: #161b22; border: 1px solid var(--border); padding: 24px;
+            border-radius: 16px; width: 90%; max-width: 400px; text-align: center;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.8);
+        }
+        .modal-box h3 { margin-bottom: 12px; color: white; font-size: 1.2rem; }
+        .modal-box p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 16px; }
+        .modal-box input {
+            width: 100%; padding: 12px; background: #0d1117; border: 1px solid var(--border);
+            border-radius: 8px; color: white; font-size: 1rem; margin-bottom: 16px; outline: none;
         }
 
-        .toast.show {
-            transform: translateX(-50%) translateY(0);
-            opacity: 1;
+        .toast {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px);
+            background: var(--success); color: white; padding: 10px 20px; border-radius: 30px;
+            font-weight: 600; font-size: 0.88rem; box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+            opacity: 0; transition: all 0.3s ease; pointer-events: none; z-index: 10001;
         }
+        .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <!-- En-tête / Header -->
+    <!-- Splash Screen EDG -->
+    <div id="splash-screen">
+        <div class="splash-logo"><i class="fa-solid fa-paste"></i></div>
+        <div class="splash-text">EDEN DRC GROUP - Sync...</div>
+    </div>
+
+    <!-- Modal d'accueil premier lancement -->
+    <div id="onboard-modal">
+        <div class="modal-box">
+            <h3>Bienvenue sur ClipBoard Sync</h3>
+            <p>Comment souhaitez-vous que EDG vous appelle ?</p>
+            <input type="text" id="usernameInput" placeholder="Entrez votre prénom ou nom...">
+            <button class="btn btn-primary" style="width: 100%;" onclick="saveUsername()">Commencer l'aventure</button>
+        </div>
+    </div>
+
+    <div class="container" id="mainContainer">
         <div class="header">
             <div class="brand-title">
                 <i class="fa-solid fa-paste" style="color: var(--accent-blue);"></i>
@@ -261,17 +333,21 @@ HTML_TEMPLATE = """
             </div>
         </div>
 
-        <!-- Message de Salutation -->
-        <div class="welcome-msg">
-            👋 Bonjour ! Partagez vos textes et liens en temps réel sur tous vos appareils.
+        <!-- Salutation Aléatoire & Personnalisée -->
+        <div class="welcome-msg" id="greetingMsg">
+            👋 Chargement de vos salutations...
         </div>
 
-        <!-- Zone de texte principal -->
         <div class="textarea-box">
             <textarea id="clipboard" placeholder="Tapez ou collez votre texte ici..."></textarea>
         </div>
 
-        <!-- Grille de boutons d'action -->
+        <!-- Bloc Mémo additionnel (+) -->
+        <div class="memo-container" id="memoContainer">
+            <div class="history-title" style="color: var(--accent-orange);"><i class="fa-solid fa-note-sticky"></i> Bloc-notes rapide synchronisé</div>
+            <textarea id="memoBox" class="textarea memo-textarea" placeholder="Notez des idées rapides ici..." oninput="syncMemo()"></textarea>
+        </div>
+
         <div class="actions-grid">
             <button class="btn btn-primary" onclick="sendClipboard()">
                 <i class="fa-solid fa-paper-plane"></i> Mettre à jour
@@ -279,12 +355,14 @@ HTML_TEMPLATE = """
             <button class="btn btn-secondary" onclick="copyToClipboard()">
                 <i class="fa-solid fa-copy"></i> Copier
             </button>
+            <button class="btn btn-memo" onclick="toggleMemo()">
+                <i class="fa-solid fa-plus"></i> Mémo (+)
+            </button>
             <button class="btn btn-danger" onclick="clearClipboard()">
                 <i class="fa-solid fa-trash-can"></i> Effacer
             </button>
         </div>
 
-        <!-- Historique Récent -->
         <div class="history-section">
             <div class="history-title">
                 <i class="fa-solid fa-clock-rotate-left"></i> Historique récent
@@ -295,15 +373,63 @@ HTML_TEMPLATE = """
         </div>
     </div>
 
-    <!-- Toast Notification -->
     <div id="toast" class="toast">
-        <i class="fa-solid fa-circle-check"></i> <span id="toastMsg">Copié dans le presse-papiers !</span>
+        <i class="fa-solid fa-circle-check"></i> <span id="toastMsg">Action réussie !</span>
     </div>
 
     <script>
         const socket = io();
         const textarea = document.getElementById('clipboard');
+        const memoBox = document.getElementById('memoBox');
         const historyList = document.getElementById('historyList');
+
+        // Gestion du nom d'utilisateur et salutations aléatoires
+        const greetings = [
+            "Prêt à propulser tes projets aujourd'hui",
+            "La puissance d'EDG à portée de main",
+            "Heureux de te revoir en forme",
+            "Tes idées n'attendent que d'être partagées",
+            "Que vas-tu synchroniser de beau aujourd'hui",
+            "L'excellence technique commence ici"
+        ];
+
+        window.addEventListener('DOMContentLoaded', () => {
+            let username = localStorage.getItem('edg_username');
+            if (!username) {
+                document.getElementById('onboard-modal').style.display = 'flex';
+            } else {
+                initGreeting(username);
+            }
+
+            // Disparition du Splash Screen après l'animation
+            setTimeout(() => {
+                document.getElementById('splash-screen').style.opacity = '0';
+                setTimeout(() => {
+                    document.getElementById('splash-screen').style.display = 'none';
+                    document.getElementById('mainContainer').classList.add('visible');
+                }, 800);
+            }, 2200);
+        });
+
+        function saveUsername() {
+            const val = document.getElementById('usernameInput').value.trim();
+            if (val) {
+                localStorage.setItem('edg_username', val);
+                document.getElementById('onboard-modal').style.display = 'none';
+                initGreeting(val);
+                document.getElementById('mainContainer').classList.add('visible');
+            }
+        }
+
+        function initGreeting(name) {
+            const randomText = greetings[Math.floor(Math.random() * greetings.length)];
+            document.getElementById('greetingMsg').innerText = `👋 Salut ${name} ! ${randomText}.`;
+        }
+
+        function toggleMemo() {
+            const box = document.getElementById('memoContainer');
+            box.classList.toggle('active');
+        }
 
         socket.on('connect', () => {
             console.log('Connecté au serveur Cloud EDG');
@@ -311,13 +437,19 @@ HTML_TEMPLATE = """
 
         socket.on('update_clipboard', (data) => {
             textarea.value = data.text;
+            if (data.memo !== undefined && memoBox.value !== data.memo) {
+                memoBox.value = data.memo;
+            }
             updateHistory(data.history);
         });
 
         function sendClipboard() {
-            const text = textarea.value;
-            socket.emit('sync_text', { text: text });
+            socket.emit('sync_text', { text: textarea.value, memo: memoBox.value });
             showToast('Presse-papiers synchronisé !');
+        }
+
+        function syncMemo() {
+            socket.emit('sync_text', { text: textarea.value, memo: memoBox.value });
         }
 
         function copyToClipboard() {
@@ -329,7 +461,7 @@ HTML_TEMPLATE = """
 
         function clearClipboard() {
             textarea.value = '';
-            socket.emit('sync_text', { text: '' });
+            socket.emit('sync_text', { text: '', memo: memoBox.value });
             showToast('Presse-papiers effacé !');
         }
 
@@ -365,14 +497,23 @@ def index():
 
 @socketio.on('sync_text')
 def handle_sync(data):
-    global CURRENT_CLIPBOARD, clipboard_history
+    global CURRENT_CLIPBOARD, MEMO_CONTENT, clipboard_history
     text = data.get('text', '')
+    memo = data.get('memo', '')
+    
     CURRENT_CLIPBOARD = text
+    MEMO_CONTENT = memo
+    
     if text and (not clipboard_history or clipboard_history[-1] != text):
         clipboard_history.append(text)
         if len(clipboard_history) > 10:
             clipboard_history.pop(0)
-    emit('update_clipboard', {'text': CURRENT_CLIPBOARD, 'history': clipboard_history}, broadcast=True)
+            
+    emit('update_clipboard', {
+        'text': CURRENT_CLIPBOARD, 
+        'memo': MEMO_CONTENT, 
+        'history': clipboard_history
+    }, broadcast=True)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
